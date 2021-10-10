@@ -3,6 +3,7 @@ body {background:black;color:white;}
 a {color:green;}
 </style>
 
+<h1>Pluto-for-Channels</h1>
 <h2>
 	These files are updated every 3 hours.
 	Unique deviceID and sid parameters are inserted into the stream URLs every time the playlist link below file is called.<Br>
