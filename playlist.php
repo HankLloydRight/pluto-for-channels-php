@@ -1,5 +1,10 @@
 <?
 
+// note: This PHP file is symlinked to playlist.m3u 
+// The following line added to .htaccess: 
+// Addhandler application/x-httpd-php .html .php .m3u .m3u8
+// This makes it the php file appear as a static .m3u file, but is regenerated on each access
+
 date_default_timezone_set("America/New_York");
 header('Access-Control-Allow-Origin: *');
 header($_SERVER["SERVER_PROTOCOL"].' 200 OK', true, 200);
