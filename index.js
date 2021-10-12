@@ -4,7 +4,7 @@ const request = require("request");
 const j2x = require("jsontoxml");
 const moment = require("moment");
 const fs = require("fs-extra");
-const uuid4 = require("uuid").v4;
+//const uuid4 = require("uuid").v4;
 //const uuid1 = require("uuid").v1;
 const url = require("url");
 
@@ -310,7 +310,7 @@ function processChannels(version, channels) {
   let m3u8 = "#EXTM3U\n\n";
   channels.forEach((channel) => {
     let deviceId = "DEVICEID"; //uuid1();
-    let sid = uuid4();
+    let sid = "SID"; // uuid4();
     if (
       channel.isStitched &&
       !channel.slug.match(/^announcement|^privacy-policy/)
