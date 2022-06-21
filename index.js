@@ -195,7 +195,7 @@ const seriesGenres = [
       "Family Comedies",
     ],
   ],
-  [["Crime"], ["Crime Action", "Crime Drama"]],
+  [["Crime"], ["Crime Action", "Crime Drama", "Crime Documentaries"]],
   [["Crime drama"], ["Crime Drama"]],
   [
     ["Drama"],
@@ -258,13 +258,17 @@ const plutoIPTV = {
         timeRange[1].format("YYYY-MM-DD HH:00:00.000ZZ")
       );
 
-      let url = `http://api.pluto.tv/v2/channels?start=${startTime}&stop=${stopTime}`;
+      let url = `https://api.pluto.tv/v2/channels?start=${startTime}&stop=${stopTime}`;
       console.log(url);
 
       promises.push(
         new Promise((resolve, reject) => {
           request(url, function (err, code, raw) {
-            resolve(JSON.parse(raw));
+            if (err) {
+              reject(err);
+            } else {
+              resolve(JSON.parse(raw));
+            }
           });
         })
       );
@@ -288,12 +292,11 @@ const plutoIPTV = {
       });
 
       fullChannels = Object.values(channelsList);
-      console.log("[DEBUG] Using api.pluto.tv, writing cache.json.");
-      fs.writeFileSync("cache.json", JSON.stringify(fullChannels));
-
       sortedChannels = fullChannels.sort(
         ({ number: a }, { number: b }) => a - b
       );
+      console.log("[DEBUG] Using api.pluto.tv, writing cache.json.");
+      fs.writeFileSync("cache.json", JSON.stringify(sortedChannels));
       callback(sortedChannels);
       return;
     });
@@ -302,7 +305,17 @@ const plutoIPTV = {
 
 module.exports = plutoIPTV;
 
-function processChannels(version, channels) {
+function processChannels(version, list) {
+  let seenChannels = {};
+  let channels = [];
+  list.forEach((channel) => {
+    if (seenChannels[channel.number]) {
+      return;
+    }
+    seenChannels[channel.number] = true;
+    channels.push(channel);
+  });
+
   ///////////////////
   // M3U8 Playlist //
   ///////////////////
@@ -310,7 +323,7 @@ function processChannels(version, channels) {
   let m3u8 = "#EXTM3U\n\n";
   channels.forEach((channel) => {
     let deviceId = "DEVICEID"; //uuid1();
-    let sid = "SID"; // uuid4();
+    let sid = "SID"; //uuid4();
     if (
       channel.isStitched &&
       !channel.slug.match(/^announcement|^privacy-policy/)
@@ -353,12 +366,11 @@ function processChannels(version, channels) {
       let guideDescription = channel.summary
         .replace(/(\r\n|\n|\r)/gm, " ")
         .replace('"', "")
-        .replace("", "");
-      let channelNumberTag;
+        .replace("”", "");
 
       m3u8 =
         m3u8 +
-        `#EXTINF:0 channel-id="${slug}" tvg-logo="${logo}" tvc-guide-art="${art}" tvc-guide-title="${name}" tvc-guide-description="${guideDescription}" group-title="${group}", ${name}
+        `#EXTINF:0 channel-id="${slug}" channel-number="${channel.number}" tvg-logo="${logo}" tvc-guide-art="${art}" tvc-guide-title="${name}" tvc-guide-description="${guideDescription}" group-title="${group}", ${name}
 ${m3uUrl}
 
 `;
@@ -399,15 +411,10 @@ ${m3uUrl}
       //////////////
       // Episodes //
       //////////////
+      console.log("[INFO] Processing channel " + channel.name);
       if (channel.timelines) {
         channel.timelines.forEach((programme) => {
-          console.log(
-            "[INFO] Adding instance of " +
-              programme.title +
-              " to channel " +
-              channel.name +
-              "."
-          );
+          console.log(          "[INFO]     Adding instance of " +              programme.title          );
 
           let episodeParts = programme.episode.description.match(
             /\(([Ss](\d+)[Ee](\d+))\)/
@@ -415,9 +422,17 @@ ${m3uUrl}
           let episodeNumberString;
           if (episodeParts) {
             episodeNumberString = episodeParts[1];
+          } else if (
+          	programme.episode.season > 0 &&
+          	programme.episode.number > 0
+          	) {
+            episodeNumberString = `S${programme.episode.season}E${programme.episode.number}`;
+          } else if (programme.episode.number > 0) {
+            episodeNumberString = `${programme.episode.number}`;
           }
 
           let isMovie = programme.episode.series.type == "film";
+          let isLive = programme.episode.liveBroadcast === true;
 
           let channelsGenres = [];
           let mogrifiedGenres = [...movieGenres, ...seriesGenres];
@@ -459,11 +474,6 @@ ${m3uUrl}
               { name: "title", attrs: { lang: "en" }, text: programme.title },
               { name: "icon", attrs: { src: airingArt } },
               {
-                name: "desc",
-                attrs: { lang: "en" },
-                text: programme.episode.description,
-              },
-              {
                 name: "date",
                 text: moment(
                   programme.episode.clip
@@ -477,45 +487,83 @@ ${m3uUrl}
                 text: isMovie ? "Movie" : "Series",
               },
               {
-                name: "category",
-                attrs: { lang: "en" },
-                text: programme.episode.genre,
-              },
-              {
-                name: "category",
-                attrs: { lang: "en" },
-                text: programme.episode.subGenre,
-              },
-              {
                 name: "series-id",
                 attrs: { system: "pluto" },
                 text: programme.episode.series._id,
               },
-              {
+            ],
+          };
+
+          if (
+          	programme.episode.description &&
+            programme.episode.description != "No information available"
+            ) {
+            airing.children.push({
+                name: "desc",
+                attrs: { lang: "en" },
+                text: programme.episode.description,
+            });
+          }
+          if (
+          	programme.episode.genre &&
+          	programme.episode.genre != "No information available"
+          	) {
+            airing.children.push({
+                name: "category",
+                attrs: { lang: "en" },
+                text: programme.episode.genre,
+            });
+          }
+          if (
+          	programme.episode.subGenre &&
+          	programme.episode.subGenre != "No information available"
+          ) {
+            airing.children.push({
+                name: "category",
+                attrs: { lang: "en" },
+                text: programme.episode.subGenre,
+            });
+          }
+          if (episodeNumberString && !isMovie && !isLive) {
+            airing.children.push({
                 name: "episode-num",
                 attrs: { system: "onscreen" },
-                text: episodeNumberString || programme.episode.number,
-              },
-              {
+                text: episodeNumberString,
+            });
+          }
+          if (!isMovie && !isLive) {
+            airing.children.push({
                 name: "episode-num",
                 attrs: { system: "pluto" },
                 text: programme.episode._id,
-              },
-              {
+            });
+          }
+
+          let oad = programme.episode.clip
+          	? programme.episode.clip.originalReleaseDate
+          	: null;
+          if (isLive) {
+            airing.children.push({
+              name: "live",
+            });
+            airing.children.push({
                 name: "episode-num",
                 attrs: { system: "original-air-date" },
-                text: programme.episode.clip
-                  ? programme.episode.clip.originalReleaseDate
-                  : null,
-              },
-            ],
-          };
+                text:  moment(programme.start).format("YYYYMMDDHHmmss ZZ"),
+            });
+          } else if (oad) {
+            airing.children.push({
+              name: "episode-num",
+              attrs: { system: "original-air-date" },
+              text: oad,
+            });
+          }
 
           let uniqueGenres = channelsGenres.filter(function (item, pos) {
             return channelsGenres.indexOf(item) == pos;
           });
 
-          uniqueGenres.forEach((genre) => {
+		  uniqueGenres.forEach((genre) => {
             airing.children.push({
               name: "category",
               attrs: { lang: "en" },
@@ -523,14 +571,15 @@ ${m3uUrl}
             });
           });
 
-          if (!isMovie) {
+          let subTitle =
+          	programme.title == programme.episode.name
+          	? ""
+          	: programme.episode.name;
+          if (!isMovie && subTitle) {
             airing.children.push({
               name: "sub-title",
               attrs: { lang: "en" },
-              text:
-                programme.title == programme.episode.name
-                  ? ""
-                  : programme.episode.name,
+              text: subTitle,
             });
           }
 
@@ -548,9 +597,9 @@ ${m3uUrl}
     }
   );
 
-  epgFileName = version == "main" ? "epg.xml" : `${version}-epg.xml`;
-  playlistFileName =
-    version == "main" ? "source.m3u" : `${version}-playlist.m3u`;
+  epg="<!-- Generated by Pluto-for-channels-PHP  https://nocords.xyz using https://github.com/maddox/pluto-for-channels version:1.2.9 -->"+epg;
+  epgFileName      = version == "main" ? "/home/nocord/pub/pluto/source.xml" : `${version}-epg.xml`;
+  playlistFileName = version == "main" ? "/home/nocord/pub/pluto/source.m3u" : `${version}-playlist.m3u`;
 
   fs.writeFileSync(epgFileName, epg);
   console.log(`[SUCCESS] Wrote the EPG to ${epgFileName}!`);
