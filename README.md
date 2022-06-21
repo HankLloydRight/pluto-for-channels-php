@@ -14,6 +14,6 @@ The epg.xml file requires no modifications and is served as output from the inde
 
 The playlist.m3u and epg.xml outputs from this repo can be found here:  
 
-https://sqrl.ws/pluto/playlist.m3u
+https://nocords.xyz/pluto/playlist.m3u
 
-https://sqrl.ws/pluto/epg.xml
+https://nocords.xyz/pluto/epg.xml
